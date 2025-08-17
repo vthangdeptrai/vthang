@@ -1,0 +1,66 @@
+-- // Auto Attack Script (AOE Version, 120 hits/s)
+-- Đánh tất cả NPC trong bán kính 30, spam 120 lần mỗi giây
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+
+-- RemoteEvents (nằm trong Modules/Net)
+local net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
+
+local registerAttack = net:FindFirstChild("RegisterAttack") or net:FindFirstChild("RE/RegisterAttack")
+local registerHit = net:FindFirstChild("RegisterHit") or net:FindFirstChild("RE/RegisterHit")
+
+-- Debug nếu không tìm thấy
+if not registerAttack or not registerHit then
+    warn("⚠️ Không tìm thấy RegisterAttack hoặc RegisterHit trong Net!")
+    for _, obj in ipairs(net:GetChildren()) do
+        print("👉 Trong Net có:", obj.Name, obj.ClassName)
+    end
+    return
+end
+
+-- Hàm lấy tất cả NPC trong bán kính
+local function GetEnemiesInRange(maxDistance)
+    local enemiesFolder = Workspace:FindFirstChild("Enemies")
+    if not enemiesFolder then return {} end
+
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return {} end
+
+    local result = {}
+    for _, npc in pairs(enemiesFolder:GetChildren()) do
+        local humanoid = npc:FindFirstChildOfClass("Humanoid")
+        local hitPart = npc:FindFirstChild("Head")
+        if humanoid and humanoid.Health > 0 and hitPart then
+            local d = (hitPart.Position - root.Position).Magnitude
+            if d <= maxDistance then
+                table.insert(result, npc)
+            end
+        end
+    end
+    return result
+end
+
+-- Auto Attack tất cả NPC trong bán kính (120 lần/s)
+local attackRange = 30
+local delay = 1 / 120 -- 120 lần / giây
+
+task.spawn(function()
+    while task.wait(delay) do
+        local enemies = GetEnemiesInRange(attackRange)
+        if #enemies > 0 then
+            for _, npc in ipairs(enemies) do
+                local hitPart = npc:FindFirstChild("Head")
+                if hitPart then
+                    -- Spam tấn công 120 lần/s
+                    registerAttack:FireServer(1)
+                    registerHit:FireServer(hitPart, {}, "default_code", 0.5)
+                end
+            end
+        end
+    end
+end)
