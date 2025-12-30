@@ -1,33 +1,33 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local player = game:GetService("Players").LocalPlayer
 local net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
 
 local registerAttack = net:FindFirstChild("RegisterAttack") or net:FindFirstChild("RE/RegisterAttack")
 local registerHit = net:FindFirstChild("RegisterHit") or net:FindFirstChild("RE/RegisterHit")
 
--- Cấu hình tối ưu
-local ATTACK_RANGE = 300 -- Gấp 10 lần bản cũ
-local WAIT_TIME = 1/60   -- 60 lần/s (Đủ nhanh để hủy diệt và an toàn hơn 120)
+-- CẤU HÌNH SIÊU TỐC
+local HIT_MULTIPLIER = 10 -- Gửi 10 lần sát thương trên mỗi NPC mỗi khung hình
+local AOE_RANGE = 3000    -- Tăng phạm vi lên 3000 (gần như toàn bản đồ)
 
-task.spawn(function()
-    while task.wait(WAIT_TIME) do
-        local char = player.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        local enemiesFolder = workspace:FindFirstChild("Enemies")
+RunService.Stepped:Connect(function()
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local enemiesFolder = workspace:FindFirstChild("Enemies")
 
-        if root and enemiesFolder then
-            -- Chỉ gọi RegisterAttack 1 lần duy nhất mỗi chu kỳ để kích hoạt trạng thái đánh
-            registerAttack:FireServer(1) 
+    if root and enemiesFolder then
+        -- Kích hoạt trạng thái tấn công
+        registerAttack:FireServer(1)
 
-            -- Quét và đánh tất cả mục tiêu trong phạm vi cùng lúc (Multi-target AOE)
-            for _, npc in ipairs(enemiesFolder:GetChildren()) do
-                local hum = npc:FindFirstChildOfClass("Humanoid")
-                local hitPart = npc:FindFirstChild("Head") or npc:FindFirstChild("HumanoidRootPart")
+        for _, npc in ipairs(enemiesFolder:GetChildren()) do
+            local hum = npc:FindFirstChildOfClass("Humanoid")
+            local hitPart = npc:FindFirstChild("Head") or npc:FindFirstChild("HumanoidRootPart")
 
-                if hum and hum.Health > 0 and hitPart then
-                    local distance = (hitPart.Position - root.Position).Magnitude
-                    if distance <= ATTACK_RANGE then
-                        -- Gửi lệnh trúng đòn cho từng mục tiêu
+            if hum and hum.Health > 0 and hitPart then
+                local dist = (hitPart.Position - root.Position).Magnitude
+                if dist <= AOE_RANGE then
+                    -- Vòng lặp nhân bản tốc độ đánh (Siêu nhanh)
+                    for i = 1, HIT_MULTIPLIER do
                         registerHit:FireServer(hitPart, {}, "default_code", 0.5)
                     end
                 end
