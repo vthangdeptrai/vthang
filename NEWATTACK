@@ -1,59 +1,39 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local player = game:GetService("Players").LocalPlayer
+local net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
 
--- 1. TỰ ĐỘNG TÌM REMOTE (Sửa lỗi sai đường dẫn)
-local function FindRemote(name)
-    for _, v in pairs(ReplicatedStorage:GetDescendants()) do
-        if v.Name == name and v:IsA("RemoteEvent") then
-            return v
-        end
-    end
-    return nil
-end
+local registerAttack = net:FindFirstChild("RegisterAttack") or net:FindFirstChild("RE/RegisterAttack")
+local registerHit = net:FindFirstChild("RegisterHit") or net:FindFirstChild("RE/RegisterHit")
 
-local registerAttack = FindRemote("RegisterAttack")
-local registerHit = FindRemote("RegisterHit")
+-- CẤU HÌNH ĐÃ TỐI ƯU (KHÔNG GÂY ĐỨNG MÁY)
+local HIT_MULTIPLIER = 5 -- Giảm xuống mức ổn định (Vẫn rất nhanh)
+local AOE_RANGE = 5000 
+local ATTACK_SPEED = 0.05 -- Tốc độ đánh cực nhanh (tương đương 20 lần/s)
 
--- 2. TỰ ĐỘNG TÌM FOLDER QUÁI (Sửa lỗi sai tên folder Enemies)
-local function GetEnemiesFolder()
-    return workspace:FindFirstChild("Enemies") 
-        or workspace:FindFirstChild("NPCs") 
-        or workspace:FindFirstChild("Mobs")
-        or workspace -- Nếu không thấy, quét toàn bộ workspace
-end
+task.spawn(function()
+    while task.wait(ATTACK_SPEED) do
+        local char = player.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local enemiesFolder = workspace:FindFirstChild("Enemies")
 
--- 3. CẤU HÌNH SIÊU TỐC & AOE
-local HIT_PER_FRAME = 10 
-local AOE_RANGE = 5000 -- Cực đại
+        if root and enemiesFolder then
+            -- Chỉ vung chiêu 1 lần để tránh lag
+            registerAttack:FireServer(1)
 
-if not registerAttack or not registerHit then
-    warn("❌ Không tìm thấy Remote! Game có thể đã đổi tên hoặc cấu trúc.")
-    return
-end
+            local enemies = enemiesFolder:GetChildren()
+            for _, npc in ipairs(enemies) do
+                local hum = npc:FindFirstChildOfClass("Humanoid")
+                local hitPart = npc:FindFirstChild("Head") or npc:FindFirstChild("HumanoidRootPart")
 
-print("✅ Script đã nhận diện được Remote. Đang bắt đầu đánh...")
-
-RunService.Heartbeat:Connect(function()
-    local enemiesFolder = GetEnemiesFolder()
-    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-
-    -- Vung chiêu
-    registerAttack:FireServer(1)
-
-    -- Quét mục tiêu
-    for _, npc in ipairs(enemiesFolder:GetChildren()) do
-        -- Kiểm tra nếu là NPC hợp lệ (có Humanoid và còn sống)
-        local hum = npc:FindFirstChildOfClass("Humanoid")
-        local hitPart = npc:FindFirstChild("Head") or npc:FindFirstChild("HumanoidRootPart")
-
-        if hum and hum.Health > 0 and hitPart then
-            -- Kiểm tra khoảng cách AOE
-            if (hitPart.Position - root.Position).Magnitude <= AOE_RANGE then
-                for i = 1, HIT_PER_FRAME do
-                    -- Gửi lệnh đánh
-                    registerHit:FireServer(hitPart, {}, "default_code", 0.5)
+                if hum and hum.Health > 0 and hitPart then
+                    local dist = (hitPart.Position - root.Position).Magnitude
+                    if dist <= AOE_RANGE then
+                        -- Gửi lệnh đánh theo đợt (Batching)
+                        for i = 1, HIT_MULTIPLIER do
+                            registerHit:FireServer(hitPart, {}, "default_code", 0.5)
+                        end
+                    end
                 end
             end
         end
