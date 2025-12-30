@@ -6,31 +6,25 @@ local net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
 local registerAttack = net:FindFirstChild("RegisterAttack") or net:FindFirstChild("RE/RegisterAttack")
 local registerHit = net:FindFirstChild("RegisterHit") or net:FindFirstChild("RE/RegisterHit")
 
--- CẤU HÌNH SIÊU TỐC
-local HIT_MULTIPLIER = 10 -- Gửi 10 lần sát thương trên mỗi NPC mỗi khung hình
-local AOE_RANGE = 3000    -- Tăng phạm vi lên 3000 (gần như toàn bản đồ)
+-- CẤU HÌNH MAXIMUM
+local HIT_PER_FRAME = 15 -- Số lần đánh trên mỗi NPC trong 1 khung hình (Tăng nếu muốn nhanh hơn)
+local INFINITE_AOE = true -- Bật chế độ đánh toàn bản đồ
 
-RunService.Stepped:Connect(function()
-    local char = player.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
+RunService.Heartbeat:Connect(function()
     local enemiesFolder = workspace:FindFirstChild("Enemies")
+    if not enemiesFolder then return end
 
-    if root and enemiesFolder then
-        -- Kích hoạt trạng thái tấn công
-        registerAttack:FireServer(1)
+    -- Kích hoạt trạng thái tấn công một lần mỗi frame
+    registerAttack:FireServer(1)
 
-        for _, npc in ipairs(enemiesFolder:GetChildren()) do
-            local hum = npc:FindFirstChildOfClass("Humanoid")
-            local hitPart = npc:FindFirstChild("Head") or npc:FindFirstChild("HumanoidRootPart")
+    for _, npc in ipairs(enemiesFolder:GetChildren()) do
+        local hum = npc:FindFirstChildOfClass("Humanoid")
+        local hitPart = npc:FindFirstChild("Head") or npc:FindFirstChild("HumanoidRootPart")
 
-            if hum and hum.Health > 0 and hitPart then
-                local dist = (hitPart.Position - root.Position).Magnitude
-                if dist <= AOE_RANGE then
-                    -- Vòng lặp nhân bản tốc độ đánh (Siêu nhanh)
-                    for i = 1, HIT_MULTIPLIER do
-                        registerHit:FireServer(hitPart, {}, "default_code", 0.5)
-                    end
-                end
+        -- Đánh nếu NPC còn sống, không cần check khoảng cách (AOE Vô hạn)
+        if hum and hum.Health > 0 and hitPart then
+            for i = 1, HIT_PER_FRAME do
+                registerHit:FireServer(hitPart, {}, "default_code", 0.5)
             end
         end
     end
