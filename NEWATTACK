@@ -1,37 +1,121 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService") -- Thêm để hỗ trợ kéo thả
 local player = game:GetService("Players").LocalPlayer
 local net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
 
 local registerAttack = net:FindFirstChild("RegisterAttack") or net:FindFirstChild("RE/RegisterAttack")
 local registerHit = net:FindFirstChild("RegisterHit") or net:FindFirstChild("RE/RegisterHit")
 
--- CẤU HÌNH ĐÃ TỐI ƯU (KHÔNG GÂY ĐỨNG MÁY)
-local HIT_MULTIPLIER = 5 -- Giảm xuống mức ổn định (Vẫn rất nhanh)
-local AOE_RANGE = 5000 
-local ATTACK_SPEED = 0.05 -- Tốc độ đánh cực nhanh (tương đương 20 lần/s)
+-- BIẾN ĐIỀU KHIỂN
+_G.AutoAttack = false 
+local AOE_RANGE = 5000
+local MAX_TARGETS = 5 -- Giới hạn để không đứng máy
+local ATTACK_SPEED = 0.05
+local HIT_MULTIPLIER = 10 -- Đã thêm biến bị thiếu trong script của bạn
 
+--- // TẠO GUI (GIỮ NGUYÊN STYLE CỦA BẠN)
+local ScreenGui = Instance.new("ScreenGui")
+local MainFrame = Instance.new("Frame")
+local UICorner = Instance.new("UICorner")
+local Title = Instance.new("TextLabel")
+local ToggleButton = Instance.new("TextButton")
+local UICorner2 = Instance.new("UICorner")
+
+ScreenGui.Parent = player:WaitForChild("PlayerGui")
+ScreenGui.Name = "Gemini_Hub"
+
+-- Khung chính
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+MainFrame.Position = UDim2.new(0, 20, 0.5, -60)
+MainFrame.Size = UDim2.new(0, 150, 0, 100)
+MainFrame.Active = true
+
+UICorner.Parent = MainFrame
+
+-- Hệ thống kéo thả mượt mà (Thay thế Draggable cũ)
+local dragging, dragInput, dragStart, startPos
+MainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Tiêu đề
+Title.Parent = MainFrame
+Title.BackgroundTransparency = 1
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.Font = Enum.Font.SourceSansBold
+Title.Text = "V.Thắng-Spam"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 16
+
+-- Nút Bật/Tắt
+ToggleButton.Name = "ToggleButton"
+ToggleButton.Parent = MainFrame
+ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+ToggleButton.Position = UDim2.new(0.1, 0, 0.4, 0)
+ToggleButton.Size = UDim2.new(0.8, 0, 0.4, 0)
+ToggleButton.Font = Enum.Font.SourceSansBold
+ToggleButton.Text = "ATTACK: OFF"
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.TextSize = 14
+
+UICorner2.Parent = ToggleButton
+
+-- Hiệu ứng khi Click
+ToggleButton.MouseButton1Click:Connect(function()
+    _G.AutoAttack = not _G.AutoAttack
+    if _G.AutoAttack then
+        ToggleButton.Text = "ATTACK: ON"
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+    else
+        ToggleButton.Text = "ATTACK: OFF"
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    end
+end)
+
+--- // LOGIC AUTO ATTACK SPAM
 task.spawn(function()
-    while task.wait(ATTACK_SPEED) do
-        local char = player.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        local enemiesFolder = workspace:FindFirstChild("Enemies")
+    while true do
+        task.wait(ATTACK_SPEED)
+        if _G.AutoAttack then
+            local char = player.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            local enemiesFolder = workspace:FindFirstChild("Enemies")
 
-        if root and enemiesFolder then
-            -- Chỉ vung chiêu 1 lần để tránh lag
-            registerAttack:FireServer(1)
+            if root and enemiesFolder then
+                -- Vung chiêu
+                registerAttack:FireServer(1)
 
-            local enemies = enemiesFolder:GetChildren()
-            for _, npc in ipairs(enemies) do
-                local hum = npc:FindFirstChildOfClass("Humanoid")
-                local hitPart = npc:FindFirstChild("Head") or npc:FindFirstChild("HumanoidRootPart")
+                local targetsFound = 0
+                for _, npc in ipairs(enemiesFolder:GetChildren()) do
+                    -- Giới hạn số mục tiêu mỗi đợt để không bị đứng nhân vật
+                    if targetsFound >= MAX_TARGETS then break end
 
-                if hum and hum.Health > 0 and hitPart then
-                    local dist = (hitPart.Position - root.Position).Magnitude
-                    if dist <= AOE_RANGE then
-                        -- Gửi lệnh đánh theo đợt (Batching)
-                        for i = 1, HIT_MULTIPLIER do
-                            registerHit:FireServer(hitPart, {}, "default_code", 0.5)
+                    local hum = npc:FindFirstChildOfClass("Humanoid")
+                    local hitPart = npc:FindFirstChild("Head") or npc:FindFirstChild("HumanoidRootPart")
+
+                    if hum and hum.Health > 0 and hitPart then
+                        local dist = (hitPart.Position - root.Position).Magnitude
+                        if dist <= AOE_RANGE then
+                            targetsFound = targetsFound + 1
+                            -- Spam nhiều hit lên 1 mục tiêu
+                            for i = 1, HIT_MULTIPLIER do
+                                registerHit:FireServer(hitPart, {}, "default_code", 0.5)
+                            end
                         end
                     end
                 end
